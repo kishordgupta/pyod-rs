@@ -1,0 +1,22 @@
+[package]
+name = "pyod-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust port of the core of PyOD (Python Outlier Detection)"
+license = "BSD-2-Clause"
+
+[dependencies]
+burn = { version = "=0.22.0", optional = true, default-features = false, features = ["std", "optim", "flex"] }
+
+[features]
+# Neural-network detectors (AutoEncoder, VAE, DeepSVDD, GAN-based, LUNAR, DIF,
+# LSTM, Anomaly Transformer, graph models), built on burn's pure-Rust CPU backend.
+deep = ["dep:burn"]
+
+[[example]]
+name = "deep_score_csv"
+required-features = ["deep"]
+
+[[example]]
+name = "graph_score_csv"
+required-features = ["deep"]
