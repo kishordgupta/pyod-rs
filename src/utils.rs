@@ -154,10 +154,12 @@ pub fn numba_argsort<T: PartialOrd + Copy>(a: &[T]) -> Vec<usize> {
         r.swap(i as usize, high);
         i as usize
     };
-    let mut stack = vec![(0usize, n - 1)];
+    // Signed bounds, as in numba: `high = i - 1` reaches -1 when the pivot
+    // lands at index 0.
+    let mut stack = vec![(0isize, n as isize - 1)];
     while let Some((mut low, mut high)) = stack.pop() {
-        while high >= low + 15 {
-            let i = partition(&mut r, low, high);
+        while high - low >= 15 {
+            let i = partition(&mut r, low as usize, high as usize) as isize;
             if high - i > i - low {
                 if high > i {
                     stack.push((i + 1, high));
@@ -170,7 +172,9 @@ pub fn numba_argsort<T: PartialOrd + Copy>(a: &[T]) -> Vec<usize> {
                 low = i + 1;
             }
         }
-        insertion(&mut r, low, high);
+        if high > low {
+            insertion(&mut r, low as usize, high as usize);
+        }
     }
     r
 }
@@ -504,6 +508,22 @@ mod tests {
         let (vals, vecs) = symmetric_eigen(&a);
         assert!((vals[0] - 3.0).abs() < 1e-10 && (vals[1] - 1.0).abs() < 1e-10);
         assert!((vecs[0][0].abs() - vecs[0][1].abs()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn numba_argsort_pivot_at_start() {
+        // The first partition leaves the pivot at index 0; order from numba 0.60.
+        let a = [0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1];
+        assert_eq!(
+            numba_argsort(&a),
+            vec![7, 0, 1, 2, 3, 4, 5, 6, 15, 8, 9, 10, 11, 12, 13, 14]
+        );
+        let mut rng = Rng::new(5);
+        for n in [16, 17, 40, 100, 1000] {
+            let v: Vec<u32> = (0..n).map(|_| (rng.next_f64() * 3.0) as u32).collect();
+            let r = numba_argsort(&v);
+            assert!(r.windows(2).all(|w| v[w[0]] <= v[w[1]]), "n={n}");
+        }
     }
 
     #[test]
