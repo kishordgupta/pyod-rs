@@ -7,6 +7,12 @@
 //! We use the deviation loss as defined in the paper: inliers are pulled to the
 //! reference score distribution N(0, 1), labelled outliers pushed at least
 //! `confidence_margin` standard deviations above it.
+//!
+//! When labelled outliers are present, each training batch alternates inliers
+//! and labelled outliers, as in the paper and PyOD's own (unused)
+//! `input_batch_generation_sup_sparse`, with `nb_batch` batches per epoch. With
+//! few labels, plain shuffled batches let the inlier term dominate and
+//! training can collapse.
 
 use super::{minibatches, pick, tensor1, tensor2, to_vec, train_device};
 use crate::base::{check_array, check_features, Detector, FitState, Matrix, OdError, Result};
@@ -38,6 +44,8 @@ pub struct DevNet {
     pub network_depth: usize,
     pub batch_size: usize,
     pub epochs: usize,
+    /// Balanced batches per epoch (used when labelled outliers are present).
+    pub nb_batch: usize,
     pub confidence_margin: f64,
     pub lr: f64,
     pub random_state: u64,
@@ -54,6 +62,7 @@ impl Default for DevNet {
             network_depth: 2,
             batch_size: 512,
             epochs: 50,
+            nb_batch: 20,
             confidence_margin: 5.0,
             lr: 1e-3,
             random_state: 42,
@@ -120,8 +129,25 @@ impl DevNet {
             .init();
         let mut rng = Rng::new(self.random_state);
         let labels: Vec<f64> = y.iter().map(|&v| v as f64).collect();
+        let (outliers, inliers): (Vec<usize>, Vec<usize>) = (0..x.len()).partition(|&i| y[i] != 0);
+        let balanced = !outliers.is_empty() && !inliers.is_empty();
+        let bs = self.batch_size.max(1);
         for _ in 0..self.epochs {
-            for idx in minibatches(x.len(), self.batch_size, &mut rng, false) {
+            let batches: Vec<Vec<usize>> = if balanced {
+                (0..self.nb_batch.max(1))
+                    .map(|_| {
+                        (0..bs)
+                            .map(|i| {
+                                let pool = if i % 2 == 0 { &inliers } else { &outliers };
+                                pool[rng.below(pool.len())]
+                            })
+                            .collect()
+                    })
+                    .collect()
+            } else {
+                minibatches(x.len(), bs, &mut rng, false)
+            };
+            for idx in batches {
                 let pred = net.forward(tensor2(&pick(x, &idx), &dev));
                 let yb = tensor1(&idx.iter().map(|&i| labels[i]).collect::<Vec<_>>(), &dev);
                 // Reference scores from the N(0, 1) prior.

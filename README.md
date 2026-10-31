@@ -75,7 +75,7 @@ Examples from the cross-checks:
 - **IForest** returns the paper's score `2^(-E[h]/c(ψ))`. PyOD's differs from it by a constant offset.
 - **SO-/MO-GAAL** score `1 − D(x)`; PyOD returns `D(x)`. GAAL is sensitive to data scale, and on some datasets the ranking flips either way.
 - **AnoGAN** runs the per-sample latent query on new data too. PyOD reuses the query state left by the last training sample, which makes its test scores distances to that one sample.
-- **DevNet** uses the deviation loss from the paper. PyOD calls it with its arguments swapped.
+- **DevNet** uses the deviation loss from the paper; PyOD calls it with its arguments swapped. When labelled outliers are present, each training batch alternates inliers and labelled outliers, as in the paper (`nb_batch` batches per epoch). Plain shuffled batches collapsed on some seeds.
 - **ALAD** scores with dropout off, so scores are deterministic. PyOD leaves its networks in training mode while scoring.
 - **LSCP and VAE** give the same scores when called twice on the same data. PyOD draws new randomness on each call.
 - **PCA** floors zero explained-variance weights at machine epsilon, where PyOD would divide by zero.
